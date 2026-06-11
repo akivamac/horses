@@ -424,6 +424,7 @@ main{max-width:1200px;margin:0 auto;padding:20px 14px 60px;}
     <div class="farm-sub">Temima's horse farm</div>
   </div>
   <div class="header-right">
+    <span id="save-indicator" style="font-size:.7rem;color:rgba(253,246,227,.6);font-style:italic;align-self:center;opacity:.5;transition:opacity .5s;"></span>
     <button class="btn btn-hay" onclick="openRestore()" data-tip="Load saved farm">🔑 Restore</button>
     <button class="btn btn-rose" onclick="openLogout()" data-tip="Save your farm">💾 Save</button>
   </div>
@@ -3025,6 +3026,7 @@ function renderAll(){
   renderSickAlert();
   renderHelperGrid();
   renderLog();
+  autoSave();
 }
 
 // ================================================================
@@ -3086,24 +3088,41 @@ async function idbLoad(key){
 // IndexedDB is async bonus for extra persistence
 function autoSave(){
   const code = generateCode();
-  // Synchronous — always works even during beforeunload
+  // Three layers of storage
   try{ localStorage.setItem(LS_KEY, code); }catch(e){}
-  // Async bonus — more persistent storage
+  try{ sessionStorage.setItem(LS_KEY, code); }catch(e){}
   idbSave(LS_KEY, code).catch(()=>{});
+  // Update save indicator
+  const el=document.getElementById('save-indicator');
+  if(el){
+    el.textContent='💾 Saved '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    el.style.opacity='1';
+    setTimeout(()=>el.style.opacity='.5',2000);
+  }
 }
 
-// Load — try IndexedDB first (more persistent), fall back to localStorage
 async function autoLoad(){
+  // 1. Try IndexedDB (most persistent)
   const idbData = await idbLoad(LS_KEY);
   if(idbData && applyLoadData(idbData)){
-    console.log('[Farm] Loaded from IndexedDB');
+    console.log('[Farm] Loaded from IndexedDB ✅');
     return true;
   }
+  // 2. Try localStorage
   try{
     const lsData = localStorage.getItem(LS_KEY);
     if(lsData && applyLoadData(lsData)){
-      console.log('[Farm] Loaded from localStorage');
-      idbSave(LS_KEY, lsData).catch(()=>{}); // migrate to IDB
+      console.log('[Farm] Loaded from localStorage ✅');
+      idbSave(LS_KEY, lsData).catch(()=>{});
+      return true;
+    }
+  }catch(e){}
+  // 3. Try sessionStorage
+  try{
+    const ssData = sessionStorage.getItem(LS_KEY);
+    if(ssData && applyLoadData(ssData)){
+      console.log('[Farm] Loaded from sessionStorage ✅');
+      autoSave();
       return true;
     }
   }catch(e){}
