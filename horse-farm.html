@@ -3082,27 +3082,28 @@ async function idbLoad(key){
   }catch(e){ return null; }
 }
 
-// Save to IndexedDB + localStorage as double backup
-async function autoSave(){
+// Save — localStorage is SYNCHRONOUS (guaranteed before page closes)
+// IndexedDB is async bonus for extra persistence
+function autoSave(){
   const code = generateCode();
-  await idbSave(LS_KEY, code);
+  // Synchronous — always works even during beforeunload
   try{ localStorage.setItem(LS_KEY, code); }catch(e){}
+  // Async bonus — more persistent storage
+  idbSave(LS_KEY, code).catch(()=>{});
 }
 
-// Load — try IndexedDB first, fall back to localStorage
+// Load — try IndexedDB first (more persistent), fall back to localStorage
 async function autoLoad(){
-  // Try IndexedDB first
   const idbData = await idbLoad(LS_KEY);
   if(idbData && applyLoadData(idbData)){
     console.log('[Farm] Loaded from IndexedDB');
     return true;
   }
-  // Fall back to localStorage
   try{
     const lsData = localStorage.getItem(LS_KEY);
     if(lsData && applyLoadData(lsData)){
-      console.log('[Farm] Loaded from localStorage, migrating to IndexedDB');
-      await idbSave(LS_KEY, lsData); // migrate
+      console.log('[Farm] Loaded from localStorage');
+      idbSave(LS_KEY, lsData).catch(()=>{}); // migrate to IDB
       return true;
     }
   }catch(e){}
