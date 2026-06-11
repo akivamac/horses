@@ -3156,15 +3156,19 @@ function applyLoadData(saved){
 // ================================================================
 // INIT
 // ================================================================
+// Render immediately so the page isn't blank
+if(romanceStage==='midnight_brooding') initMidnightBrooding();
+renderAll();
+addLog("🌅 Welcome to Clover Hill Farm!","system");
+
+// Then load saved data and re-render
 autoLoad().then(loaded => {
-  if(romanceStage==='midnight_brooding') initMidnightBrooding();
-  renderAll();
   if(loaded){
+    if(romanceStage==='midnight_brooding') initMidnightBrooding();
+    renderAll();
     addLog("✅ Farm restored from last session","system");
-  } else {
-    addLog("🌅 Welcome to Clover Hill Farm!","system");
   }
-});
+}).catch(e => console.warn('[Farm] Load failed:', e));
 
 // Stick tabs right below header
 function fixStickyTabs(){
