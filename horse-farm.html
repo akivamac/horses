@@ -3031,69 +3031,81 @@ function renderAll(){
 // AUTO-SAVE / AUTO-LOAD (localStorage — single device)
 // ================================================================
 const LS_KEY = 'cloverhill_farm_save';
-const SW_KEY = 'farm_main';
+const IDB_DB = 'CloverHillFarm';
+const IDB_STORE = 'saves';
 
 // ================================================================
-// SERVICE WORKER — register
+// SERVICE WORKER — register for offline caching only
 // ================================================================
-let swReady = false;
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('./horse-farm-sw.js', {scope:'./'})
-    .then(reg => {
-      swReady = true;
-      console.log('[Farm] Service worker registered:', reg.scope);
-    })
-    .catch(err => console.warn('[Farm] SW registration failed:', err));
+    .then(reg => console.log('[Farm] SW registered:', reg.scope))
+    .catch(err => console.warn('[Farm] SW failed:', err));
 }
 
-// Send message to SW and get response via MessageChannel
-function swMessage(data){
+// ================================================================
+// INDEXEDDB — persistent save storage
+// Far more reliable than localStorage on Android
+// ================================================================
+function openDB(){
   return new Promise((resolve, reject) => {
-    if(!navigator.serviceWorker.controller){resolve(null);return;}
-    const channel = new MessageChannel();
-    channel.port1.onmessage = e => resolve(e.data);
-    navigator.serviceWorker.controller.postMessage(data, [channel.port2]);
-    setTimeout(() => resolve(null), 1000); // timeout fallback
+    const req = indexedDB.open(IDB_DB, 1);
+    req.onupgradeneeded = e => {
+      e.target.result.createObjectStore(IDB_STORE, {keyPath:'key'});
+    };
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = e => reject(e);
   });
 }
 
-// Save to BOTH SW cache and localStorage — belt and suspenders
-async function autoSave(){
-  const code = generateCode();
-  // SW cache save (persistent)
+async function idbSave(key, value){
   try{
-    await swMessage({type:'SAVE', key:SW_KEY, value:code});
-  }catch(e){}
-  // localStorage fallback
-  try{
-    localStorage.setItem(LS_KEY, code);
-  }catch(e){}
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put({key, value});
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject();
+    });
+  }catch(e){ return false; }
 }
 
-// Load — try SW first, fall back to localStorage
-async function autoLoad(){
-  // Try SW cache first
+async function idbLoad(key){
   try{
-    const result = await swMessage({type:'LOAD', key:SW_KEY});
-    if(result && result.ok && result.value){
-      if(applyLoadData(result.value)){
-        console.log('[Farm] Loaded from Service Worker cache');
-        return true;
-      }
-    }
-  }catch(e){}
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get(key);
+      req.onsuccess = e => resolve(e.target.result?.value || null);
+      req.onerror = () => resolve(null);
+    });
+  }catch(e){ return null; }
+}
 
+// Save to IndexedDB + localStorage as double backup
+async function autoSave(){
+  const code = generateCode();
+  await idbSave(LS_KEY, code);
+  try{ localStorage.setItem(LS_KEY, code); }catch(e){}
+}
+
+// Load — try IndexedDB first, fall back to localStorage
+async function autoLoad(){
+  // Try IndexedDB first
+  const idbData = await idbLoad(LS_KEY);
+  if(idbData && applyLoadData(idbData)){
+    console.log('[Farm] Loaded from IndexedDB');
+    return true;
+  }
   // Fall back to localStorage
   try{
-    const saved = localStorage.getItem(LS_KEY);
-    if(saved && applyLoadData(saved)){
-      console.log('[Farm] Loaded from localStorage');
-      // Migrate to SW cache
-      autoSave();
+    const lsData = localStorage.getItem(LS_KEY);
+    if(lsData && applyLoadData(lsData)){
+      console.log('[Farm] Loaded from localStorage, migrating to IndexedDB');
+      await idbSave(LS_KEY, lsData); // migrate
       return true;
     }
   }catch(e){}
-
   return false;
 }
 
