@@ -257,37 +257,131 @@ function makeLabel3D(text){
   return sp;
 }
 
+function svgToShape(d){
+  // Tiny SVG path parser (M/L/Q/Z only) -> THREE.Shape
+  const shape=new THREE.Shape();
+  const tokens=d.match(/[MLQZ]|[-\d.e]+/g);
+  let i=0;
+  const px=()=>parseFloat(tokens[i++]);
+  let x=0,y=0;
+  while(i<tokens.length){
+    const cmd=tokens[i++];
+    if(cmd==='M'){ x=px();y=px(); shape.moveTo(x,y); }
+    else if(cmd==='L'){ x=px();y=px(); shape.lineTo(x,y); }
+    else if(cmd==='Q'){ const cx=px(),cy=px(); x=px();y=px(); shape.quadraticCurveTo(cx,cy,x,y); }
+    else if(cmd==='Z'){ shape.closePath(); }
+  }
+  return shape;
+}
+
+function makeGradTex(stops,vertical){
+  // Vertical/horizontal gradient canvas texture (mirrors the SVG gradients)
+  const c=document.createElement('canvas');c.width=256;c.height=256;
+  const ctx=c.getContext('2d');
+  const g=vertical?ctx.createLinearGradient(0,0,0,256):ctx.createLinearGradient(0,0,256,0);
+  for(const s of stops)g.addColorStop(s[0],s[1]);
+  ctx.fillStyle=g;ctx.fillRect(0,0,256,256);
+  const tex=new THREE.CanvasTexture(c);
+  tex.wrapS=tex.wrapT=THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+const HORSE_SVG=3.6/361; // world units per SVG unit — silhouette ~3.6 tall
+const HORSE_CX=280,HORSE_GR=367;
+
+function horseSilhouette(d,depth,z,mat){
+  // Extrude an SVG profile path into a 3D slice, UVs normalized over its bbox
+  const shape=svgToShape(d);
+  const geo=new THREE.ExtrudeGeometry(shape,{depth,bevelEnabled:false});
+  const uv=geo.attributes.uv,pos=geo.attributes.position;
+  let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
+  for(let i=0;i<pos.count;i++){
+    const x=pos.getX(i),y=pos.getY(i);
+    if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+  }
+  for(let i=0;i<uv.count;i++)uv.setXY(i,(maxX>minX?(pos.getX(i)-minX)/(maxX-minX):0),(maxY>minY?(pos.getY(i)-minY)/(maxY-minY):0));
+  uv.needsUpdate=true;
+  for(let i=0;i<pos.count;i++){
+    // mirror X so the head (SVG left) faces +X, ground the hooves at y=0
+    pos.setXYZ(i,-(pos.getX(i)-HORSE_CX)*HORSE_SVG,(HORSE_GR-pos.getY(i))*HORSE_SVG,pos.getZ(i)*HORSE_SVG);
+  }
+  pos.needsUpdate=true;
+  geo.computeVertexNormals();
+  const m=new THREE.Mesh(geo,mat);
+  // ExtrudeGeometry goes z:0->depth, so center the slice on `z`
+  m.position.z=z-(depth/2)*HORSE_SVG;
+  m.castShadow=true;
+  return m;
+}
+
 function buildHorse3D(body,mane,name){
-  const bodyM=new THREE.MeshStandardMaterial({color:new THREE.Color(body)});
-  const maneM=new THREE.MeshStandardMaterial({color:new THREE.Color(mane)});
+  // Layers reproduce the 2D SVG art: body, hinged head+neck, near/far legs,
+  // mane + forelock + tail in the mane gradient, ears and muzzle.
+  const coatStops=[[0,shadeColor(body,25)],[.35,body],[.75,shadeColor(body,-25)],[1,shadeColor(body,-40)]];
+  const coatM=new THREE.MeshStandardMaterial({map:makeGradTex(coatStops,true)});
+  const legM=new THREE.MeshStandardMaterial({map:makeGradTex([[0,shadeColor(body,-10)],[.5,shadeColor(body,-25)],[1,shadeColor(body,-40)]],true)});
+  const hoofM=new THREE.MeshStandardMaterial({map:makeGradTex([[0,'#3a2a1a'],[1,'#1a0f05']],true)});
+  const maneM=new THREE.MeshStandardMaterial({map:makeGradTex([[0,shadeColor(mane,-30)],[.5,mane],[1,shadeColor(mane,-30)]],false)});
+  const earM=new THREE.MeshStandardMaterial({color:new THREE.Color(shadeColor(body,-25))});
+  const muzzleM=new THREE.MeshStandardMaterial({color:new THREE.Color(shadeColor(body,10))});
+
+  const BODY='M 175 195 Q 168 168 188 152 Q 215 138 260 134 Q 320 130 380 138 Q 415 144 432 165 Q 442 188 438 218 Q 432 245 408 254 Q 360 263 300 263 Q 235 263 200 252 Q 178 240 173 218 Q 170 205 175 195 Z';
+  const HEADNECK='M 188 152 Q 165 145 145 130 Q 122 110 118 88 Q 116 72 124 65 Q 110 52 102 38 Q 98 25 105 18 Q 116 12 132 18 Q 152 26 168 42 Q 178 55 175 70 Q 170 82 158 85 Q 145 88 135 82 Q 128 75 124 65 Q 135 60 148 70 Q 168 90 188 115 Q 205 138 210 155 Z';
+  const MUZZLE='M 102 38 Q 92 38 86 45 Q 82 53 88 60 Q 92 65 100 65 Q 110 64 113 56 Q 115 48 110 42 Q 106 38 102 38 Z';
+  const NF_THIGH='M 200 215 Q 198 232 200 248 Q 202 258 206 262 L 218 262 Q 222 258 224 248 Q 226 232 224 215 Z';
+  const NF_LOW='M 202 274 Q 203 295 204 318 L 207 332 Q 208 336 212 336 L 218 336 Q 222 336 222 332 L 222 318 Q 222 295 222 274 Z';
+  const NF_HOOF='M 204 348 L 224 348 L 226 358 Q 226 362 222 363 L 207 363 Q 203 362 203 358 Z';
+  const NH_THIGH='M 380 215 Q 376 240 372 265 Q 369 275 374 280 L 388 280 Q 393 275 392 265 Q 396 240 398 215 Z';
+  const NH_LOW='M 374 295 Q 374 312 374 328 L 376 338 Q 376 342 380 342 L 388 342 Q 392 342 392 338 L 392 328 Q 392 312 392 295 Z';
+  const NH_HOOF='M 374 352 L 393 352 L 395 362 Q 395 366 391 367 L 377 367 Q 373 366 373 362 Z';
+  const FF_LEG='M 215 230 Q 213 252 211 275 Q 209 298 207 320 L 205 340 Q 205 346 210 347 L 221 347 Q 226 346 226 340 L 226 320 Q 227 295 228 270 Q 229 250 228 230 Z';
+  const FF_HOOF='M 205 340 L 226 340 L 227 350 Q 227 354 223 355 L 209 355 Q 205 354 205 350 Z';
+  const FH_LEG='M 425 235 Q 428 255 425 275 Q 422 295 419 315 L 416 340 Q 416 346 421 347 L 432 347 Q 437 346 437 340 L 435 315 Q 433 290 432 268 Q 431 248 432 235 Z';
+  const FH_HOOF='M 416 340 L 437 340 L 438 350 Q 438 354 434 355 L 419 355 Q 415 354 415 350 Z';
+  const MANE='M 138 30 Q 134 45 138 60 Q 128 70 124 85 Q 122 100 130 112 Q 145 122 158 110 Q 150 95 148 80 Q 162 92 175 110 Q 188 130 200 150 Q 210 160 206 168 Q 195 162 182 148 Q 165 128 150 108 Q 140 92 136 75 Q 134 55 138 30 Z';
+  const TAIL='M 438 172 Q 460 178 472 200 Q 482 230 478 262 Q 472 295 460 322 Q 452 338 444 342 Q 440 340 442 335 Q 455 312 462 285 Q 468 258 466 232 Q 462 208 450 192 Q 440 182 434 178 Z';
+  const FORELOCK='M 152 14 Q 145 22 140 32 Q 138 38 142 40 Q 145 35 148 30 Q 154 22 156 16 Z';
+  const EAR_NEAR='M 144 22 Q 146 6 156 8 Q 162 16 158 30 Q 152 32 146 28 Z';
+  const EAR_FAR='M 158 22 Q 162 8 170 8 Q 175 14 172 28 Q 168 32 162 30 Z';
+
   const g=new THREE.Group();
   const parts={};
-  const bodyMesh=new THREE.Mesh(new THREE.BoxGeometry(2.6,1.1,1.05),bodyM);
-  bodyMesh.position.y=1.42;bodyMesh.castShadow=true;
-  const chest=new THREE.Mesh(new THREE.BoxGeometry(.9,.95,1.05),bodyM);
-  chest.position.set(1.45,1.5,0);chest.castShadow=true;
-  const neck=new THREE.Mesh(new THREE.BoxGeometry(.6,1.5,.8),bodyM);
-  neck.position.set(1.7,2.1,0);neck.rotation.z=.45;neck.castShadow=true;
-  const head=new THREE.Mesh(new THREE.BoxGeometry(1.05,.5,.45),bodyM);
-  head.position.set(2.35,2.6,0);head.castShadow=true;
-  const maneMesh=new THREE.Mesh(new THREE.BoxGeometry(1.5,.3,.42),maneM);
-  maneMesh.position.set(.6,2.05,0);maneMesh.rotation.z=.12;maneMesh.castShadow=true;
-  const tail=new THREE.Mesh(new THREE.BoxGeometry(.4,.3,1.3),maneM);
-  tail.position.set(-1.6,1.65,0);tail.rotation.y=Math.PI/2;tail.rotation.z=.45;tail.castShadow=true;
-  const earM=new THREE.MeshStandardMaterial({color:new THREE.Color(body)});
-  const earGeo=new THREE.ConeGeometry(.14,.4,5);
-  const earL=new THREE.Mesh(earGeo,earM);earL.position.set(2.2,2.95,.16);
-  const earR=earL.clone();earR.position.z=-.16;
-  const legGeo=new THREE.BoxGeometry(.3,1.25,.3);
-  const legs=[];
-  [[1.15,-.42],[1.15,.42],[-1.15,-.42],[-1.15,.42]].forEach(([lx,lz])=>{
-    const leg=new THREE.Mesh(legGeo,bodyM);
-    leg.position.set(lx,.62,lz);leg.castShadow=true;legs.push(leg);
-  });
+
+  g.add(horseSilhouette(BODY,80,0,coatM));
+
+  // near legs
+  g.add(horseSilhouette(NF_THIGH,22,.44,coatM));
+  g.add(horseSilhouette(NF_LOW,22,.44,legM));
+  g.add(horseSilhouette(NF_HOOF,22,.44,hoofM));
+  g.add(horseSilhouette(NH_THIGH,22,.44,coatM));
+  g.add(horseSilhouette(NH_LOW,22,.44,legM));
+  g.add(horseSilhouette(NH_HOOF,22,.44,hoofM));
+  // far legs
+  g.add(horseSilhouette(FF_LEG,22,-.44,legM));
+  g.add(horseSilhouette(FF_HOOF,22,-.44,hoofM));
+  g.add(horseSilhouette(FH_LEG,22,-.44,legM));
+  g.add(horseSilhouette(FH_HOOF,22,-.44,hoofM));
+  // tail — near side over the rump, like the SVG art
+  g.add(horseSilhouette(TAIL,24,.46,maneM));
+
+  // head + neck hinged at the neck base so grazing can lower the head
+  const hx=-(200-HORSE_CX)*HORSE_SVG, hy=(HORSE_GR-153)*HORSE_SVG;
+  const hn=new THREE.Group();
+  hn.position.set(hx,hy,0);
+  const off=m=>{ m.position.set(m.position.x-hx,m.position.y-hy,m.position.z); return m; };
+  hn.add(off(horseSilhouette(HEADNECK,55,0,coatM)));
+  hn.add(off(horseSilhouette(MUZZLE,14,.36,muzzleM)));
+  hn.add(off(horseSilhouette(FORELOCK,14,.36,maneM)));
+  hn.add(off(horseSilhouette(EAR_NEAR,18,.34,coatM)));
+  hn.add(off(horseSilhouette(EAR_FAR,18,.34,earM)));
+  // mane follows the neck so it stays attached while grazing
+  hn.add(off(horseSilhouette(MANE,24,.46,maneM)));
+  g.add(hn);
+  parts.headNeck=hn;
+
   const label=makeLabel3D(name);
-  label.position.y=3.5;
-  g.add(bodyMesh,chest,neck,head,maneMesh,tail,earL,earR,...legs,label);
-  parts.neck=neck;parts.head=head;parts.legs=legs;
+  label.position.set(0,4.05,0);
+  g.add(label);
   return{group:g,parts};
 }
 
@@ -316,17 +410,15 @@ function sync3DHorses(){
       const dx3=tx-g.position.x,dz3=tz-g.position.z;
       if(!rideState&&Math.hypot(dx3,dz3)>.02) h3.facing=Math.atan2(-dz3,dx3);
       const grazing=h.pos.grazing;
-      const targetNeck=grazing?1.0:h.exercising?.35:.45;
-      h3.parts.neck.rotation.z+=(targetNeck-h3.parts.neck.rotation.z)*.2;
-      h3.parts.head.position.y=(grazing?1.95:2.6)+Math.sin(t*3+h.id)*.03;
+      const targetNeck=grazing?-0.62:h.exercising?0.15:0;
+      h3.parts.headNeck.rotation.z+=(targetNeck-h3.parts.headNeck.rotation.z)*.2;
       g.position.x+=(tx-g.position.x)*.15;
       g.position.z+=(tz-g.position.z)*.15;
     } else {
       tx=-25.5+(h.id-1)*1.7;
       tz=-10.5;
       h3.facing=-Math.PI/2;
-      h3.parts.neck.rotation.z+=(.45-h3.parts.neck.rotation.z)*.2;
-      h3.parts.head.position.y=2.6;
+      h3.parts.headNeck.rotation.z+=(0-h3.parts.headNeck.rotation.z)*.2;
       g.position.x+=(tx-g.position.x)*.15;
       g.position.z+=(tz-g.position.z)*.15;
     }
@@ -411,7 +503,7 @@ function focus3DSelected(){
     fromP:three3D.camera.position.clone(),
     fromT:three3D.controls.target.clone(),
     toP:new THREE.Vector3(tx+6,5,tz+9),
-    toT:new THREE.Vector3(tx,1.5,tz),
+    toT:new THREE.Vector3(tx,2.2,tz),
     t0:performance.now(),dur:900
   };
 }
@@ -494,7 +586,7 @@ function updateRide(t){
   const behindX=g.position.x-Math.cos(h3.facing)*rideState.camDist;
   const behindZ=g.position.z+Math.sin(h3.facing)*rideState.camDist;
   three3D.camera.position.lerp(new THREE.Vector3(behindX,rideState.camHeight,behindZ),.18);
-  three3D.camera.lookAt(g.position.x,2.2,g.position.z);
+  three3D.camera.lookAt(g.position.x,2.6,g.position.z);
 }
 
 function initRideJoystick(){
