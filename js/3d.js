@@ -326,14 +326,11 @@ function buildHorse3D(body,mane,name){
   const muzzleM=new THREE.MeshStandardMaterial({color:new THREE.Color(shadeColor(body,10))});
 
   const BODY='M 175 195 Q 168 168 188 152 Q 215 138 260 134 Q 320 130 380 138 Q 415 144 432 165 Q 442 188 438 218 Q 432 245 408 254 Q 360 263 300 263 Q 235 263 200 252 Q 178 240 173 218 Q 170 205 175 195 Z';
-  const HEADNECK='M 188 152 Q 165 145 145 130 Q 122 110 118 88 Q 116 72 124 65 Q 110 52 102 38 Q 98 25 105 18 Q 116 12 132 18 Q 152 26 168 42 Q 178 55 175 70 Q 170 82 158 85 Q 145 88 135 82 Q 128 75 124 65 Q 135 60 148 70 Q 168 90 188 115 Q 205 138 210 155 Z';
+  const HEAD='M 124 65 Q 110 52 102 38 Q 98 25 105 18 Q 116 12 132 18 Q 152 26 168 42 Q 178 55 175 70 Q 170 82 158 85 Q 145 88 135 82 Q 128 75 124 65 Z';
+  const NECK='M 188 152 Q 165 145 145 130 Q 122 110 118 88 Q 116 72 124 65 Q 135 60 148 70 Q 168 90 188 115 Q 205 138 210 155 Z';
   const MUZZLE='M 102 38 Q 92 38 86 45 Q 82 53 88 60 Q 92 65 100 65 Q 110 64 113 56 Q 115 48 110 42 Q 106 38 102 38 Z';
-  const NF_THIGH='M 200 215 Q 198 232 200 248 Q 202 258 206 262 L 218 262 Q 222 258 224 248 Q 226 232 224 215 Z';
-  const NF_LOW='M 202 274 Q 203 295 204 318 L 207 332 Q 208 336 212 336 L 218 336 Q 222 336 222 332 L 222 318 Q 222 295 222 274 Z';
-  const NF_HOOF='M 204 348 L 224 348 L 226 358 Q 226 362 222 363 L 207 363 Q 203 362 203 358 Z';
-  const NH_THIGH='M 380 215 Q 376 240 372 265 Q 369 275 374 280 L 388 280 Q 393 275 392 265 Q 396 240 398 215 Z';
-  const NH_LOW='M 374 295 Q 374 312 374 328 L 376 338 Q 376 342 380 342 L 388 342 Q 392 342 392 338 L 392 328 Q 392 312 392 295 Z';
-  const NH_HOOF='M 374 352 L 393 352 L 395 362 Q 395 366 391 367 L 377 367 Q 373 366 373 362 Z';
+  const NF_LEG='M 200 215 Q 198 232 200 248 Q 202 258 204 265 Q 205 280 204 318 Q 203 336 205 348 Q 203 358 208 363 L 220 363 Q 225 361 225 356 Q 223 344 222 336 Q 221 318 222 274 Q 224 262 226 245 Q 228 228 226 215 Z';
+  const NH_LEG='M 380 215 Q 372 232 371 252 Q 370 272 373 295 Q 374 315 376 332 Q 375 344 377 352 Q 375 360 379 366 L 391 366 Q 396 364 396 358 Q 393 346 392 336 Q 391 318 392 295 Q 393 272 395 252 Q 398 232 398 215 Z';
   const FF_LEG='M 215 230 Q 213 252 211 275 Q 209 298 207 320 L 205 340 Q 205 346 210 347 L 221 347 Q 226 346 226 340 L 226 320 Q 227 295 228 270 Q 229 250 228 230 Z';
   const FF_HOOF='M 205 340 L 226 340 L 227 350 Q 227 354 223 355 L 209 355 Q 205 354 205 350 Z';
   const FH_LEG='M 425 235 Q 428 255 425 275 Q 422 295 419 315 L 416 340 Q 416 346 421 347 L 432 347 Q 437 346 437 340 L 435 315 Q 433 290 432 268 Q 431 248 432 235 Z';
@@ -349,31 +346,28 @@ function buildHorse3D(body,mane,name){
 
   g.add(horseSilhouette(BODY,80,0,coatM));
 
-  // near legs
-  g.add(horseSilhouette(NF_THIGH,22,.44,coatM));
-  g.add(horseSilhouette(NF_LOW,22,.44,legM));
-  g.add(horseSilhouette(NF_HOOF,22,.44,hoofM));
-  g.add(horseSilhouette(NH_THIGH,22,.44,coatM));
-  g.add(horseSilhouette(NH_LOW,22,.44,legM));
-  g.add(horseSilhouette(NH_HOOF,22,.44,hoofM));
+  // near legs — single continuous silhouettes so there are no seams
+  g.add(horseSilhouette(NF_LEG,22,.44,coatM));
+  g.add(horseSilhouette(NH_LEG,22,.44,coatM));
   // far legs
   g.add(horseSilhouette(FF_LEG,22,-.44,legM));
-  g.add(horseSilhouette(FF_HOOF,22,-.44,hoofM));
+  g.add(horseSilhouette(FF_HOOF,22,-.42,hoofM));
   g.add(horseSilhouette(FH_LEG,22,-.44,legM));
-  g.add(horseSilhouette(FH_HOOF,22,-.44,hoofM));
+  g.add(horseSilhouette(FH_HOOF,22,-.42,hoofM));
   // tail — near side over the rump, like the SVG art
   g.add(horseSilhouette(TAIL,24,.46,maneM));
 
-  // head + neck hinged at the neck base so grazing can lower the head
-  const hx=-(200-HORSE_CX)*HORSE_SVG, hy=(HORSE_GR-153)*HORSE_SVG;
+  // neck + head hinged at the neck base so grazing can lower the head
+  const hx=-(199-HORSE_CX)*HORSE_SVG, hy=(HORSE_GR-153.5)*HORSE_SVG;
   const hn=new THREE.Group();
   hn.position.set(hx,hy,0);
   const off=m=>{ m.position.set(m.position.x-hx,m.position.y-hy,m.position.z); return m; };
-  hn.add(off(horseSilhouette(HEADNECK,55,0,coatM)));
-  hn.add(off(horseSilhouette(MUZZLE,14,.36,muzzleM)));
-  hn.add(off(horseSilhouette(FORELOCK,14,.36,maneM)));
-  hn.add(off(horseSilhouette(EAR_NEAR,18,.34,coatM)));
-  hn.add(off(horseSilhouette(EAR_FAR,18,.34,earM)));
+  hn.add(off(horseSilhouette(NECK,50,0,coatM)));
+  hn.add(off(horseSilhouette(HEAD,34,.18,coatM)));
+  hn.add(off(horseSilhouette(MUZZLE,20,.32,muzzleM)));
+  hn.add(off(horseSilhouette(FORELOCK,14,.30,maneM)));
+  hn.add(off(horseSilhouette(EAR_NEAR,20,.30,coatM)));
+  hn.add(off(horseSilhouette(EAR_FAR,20,.26,earM)));
   // mane follows the neck so it stays attached while grazing
   hn.add(off(horseSilhouette(MANE,24,.46,maneM)));
   g.add(hn);
