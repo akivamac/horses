@@ -136,13 +136,20 @@
     <canvas id="view3d-canvas"></canvas>
     <div class="view3d-hud" id="view3d-hud">
       <div class="view3d-status" id="view3d-status"></div>
-      <div class="view3d-actions">
+      <div class="view3d-actions" id="view3d-actions">
         <button class="btn btn-wood" onclick="set3DCamera('overview')">🌄 Overview</button>
         <button class="btn btn-wood" onclick="set3DCamera('herd')">🐴 Herd</button>
         <button class="btn btn-wood" onclick="set3DCamera('top')">🛰 Top-down</button>
         <button class="btn btn-hay" onclick="focus3DSelected()">🎯 Selected horse</button>
+        <button class="btn btn-rose" id="ride-btn" onclick="toggleRide()">🏇 Ride</button>
       </div>
     </div>
+    <div class="ride-bar" id="ride-bar" style="display:none;">
+      <button class="btn btn-rose ride-stop" onclick="toggleRide()">⏹ Stop</button>
+      <span class="ride-name" id="ride-name"></span>
+      <div class="ride-joy" id="ride-joy"><div class="ride-joy-knob" id="ride-joy-knob"></div></div>
+    </div>
+  </div>
   </div>
   <div class="view3d-legend" id="view3d-legend"></div>
 </div>

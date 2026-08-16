@@ -4,6 +4,7 @@
 let three3D=null;          // three.js runtime state
 let three3DReady=false;    // lazy init on first visit
 let three3DCamTween=null;  // camera fly-to animation
+let rideState=null;        // riding a horse: {horseId,keys:{f,b,l,r},joy:{x,y},camDist,camHeight,last}
 
 const W_ICON={sunny:'☀️',cloudy:'⛅',overcast:'☁️',rain:'🌧️',snow:'❄️',storm:'⛈️'};
 const SEASON_LABEL={spring:'🌸 Spring',summer:'☀️ Summer',autumn:'🍁 Autumn',winter:'❄️ Winter'};
@@ -79,6 +80,7 @@ function init3DView(){
     let dragStart=null;
     canvas.addEventListener('pointerdown',e=>{dragStart=[e.clientX,e.clientY];});
     canvas.addEventListener('pointerup',e=>{
+      if(rideState) return;
       if(!dragStart) return;
       const moved=Math.hypot(e.clientX-dragStart[0],e.clientY-dragStart[1]);
       dragStart=null;
@@ -98,6 +100,7 @@ function init3DView(){
     build3DWorld();
     sync3DEnv();
     sync3DHorses();
+    initRideJoystick();
     resize3D();
     window.addEventListener('resize',resize3D);
     set3DRunning(true);
@@ -111,6 +114,7 @@ function init3DView(){
 
 function set3DRunning(on){
   if(!three3D) return;
+  if(!on&&rideState) stopRide();
   if(on&&!three3D.running){ three3D.running=true; loop3D(); }
   else if(!on&&three3D.running){ three3D.running=false; cancelAnimationFrame(three3D.raf); }
 }
@@ -130,15 +134,19 @@ function loop3D(){
   if(!three3D||!three3D.running) return;
   three3D.raf=requestAnimationFrame(loop3D);
   const t=performance.now();
-  if(three3DCamTween){
-    const k=Math.min(1,(t-three3DCamTween.t0)/three3DCamTween.dur);
-    const e=1-Math.pow(1-k,3);
-    three3D.camera.position.lerpVectors(three3DCamTween.fromP,three3DCamTween.toP,e);
-    three3D.controls.target.lerpVectors(three3DCamTween.fromT,three3DCamTween.toT,e);
+  if(rideState){
+    updateRide(t);
+  } else {
+    if(three3DCamTween){
+      const k=Math.min(1,(t-three3DCamTween.t0)/three3DCamTween.dur);
+      const e=1-Math.pow(1-k,3);
+      three3D.camera.position.lerpVectors(three3DCamTween.fromP,three3DCamTween.toP,e);
+      three3D.controls.target.lerpVectors(three3DCamTween.fromT,three3DCamTween.toT,e);
+      three3D.controls.update();
+      if(k>=1) three3DCamTween=null;
+    }
     three3D.controls.update();
-    if(k>=1) three3DCamTween=null;
   }
-  three3D.controls.update();
   sync3DHorses();
   three3D.renderer.render(three3D.scene,three3D.camera);
 }
@@ -306,7 +314,7 @@ function sync3DHorses(){
       tx=(h.pos.x-50)*0.62;
       tz=(50-h.pos.depth)*0.62;
       const dx3=tx-g.position.x,dz3=tz-g.position.z;
-      if(Math.hypot(dx3,dz3)>.02) h3.facing=Math.atan2(-dz3,dx3);
+      if(!rideState&&Math.hypot(dx3,dz3)>.02) h3.facing=Math.atan2(-dz3,dx3);
       const grazing=h.pos.grazing;
       const targetNeck=grazing?1.0:h.exercising?.35:.45;
       h3.parts.neck.rotation.z+=(targetNeck-h3.parts.neck.rotation.z)*.2;
@@ -407,3 +415,131 @@ function focus3DSelected(){
     t0:performance.now(),dur:900
   };
 }
+
+// ---------------------------------------------------------------
+// RIDE MODE (Phase 2)
+// ---------------------------------------------------------------
+function toggleRide(){
+  if(!three3D){ showToast('Open the 3D Farm view first',true); return; }
+  if(rideState){ stopRide(); return; }
+  if(selectedHorse==null){ showToast('Tap a horse to select it, then ride 🐎',true); return; }
+  const h=horses.find(x=>x.id===selectedHorse);
+  if(!h) return;
+  if(h.pos.location!=='pasture'){ showToast(h.name+' is in the stable — move them to pasture first',true); return; }
+  startRide(h);
+}
+
+function startRide(h){
+  const hud=document.getElementById('view3d-hud');
+  const bar=document.getElementById('ride-bar');
+  const nameEl=document.getElementById('ride-name');
+  const btn=document.getElementById('ride-btn');
+  if(hud) hud.classList.add('riding');
+  if(bar) bar.style.display='flex';
+  if(nameEl) nameEl.textContent='🏇 Riding '+h.name;
+  if(btn) btn.textContent='⏹ Stop';
+  h.pos.grazing=false;
+  three3DCamTween=null;
+  three3D.controls.enabled=false;
+  rideState={horseId:h.id,keys:{f:0,b:0,l:0,r:0},joy:{x:0,y:0},camDist:12,camHeight:6,last:performance.now()};
+  showToast('Riding '+h.name+'! 🕹 Joystick or W/A/S/D');
+}
+
+function stopRide(){
+  if(!rideState) return;
+  const h3=three3D&&three3D.horses[rideState.horseId];
+  rideState=null;
+  const hud=document.getElementById('view3d-hud');
+  const bar=document.getElementById('ride-bar');
+  const btn=document.getElementById('ride-btn');
+  if(hud) hud.classList.remove('riding');
+  if(bar) bar.style.display='none';
+  if(btn) btn.textContent='🏇 Ride';
+  if(three3D){
+    three3D.controls.enabled=true;
+    if(h3){ three3D.controls.target.set(h3.group.position.x,2,h3.group.position.z); }
+  }
+  showToast('Riding ended — 🎯 hop off anytime');
+}
+
+function updateRide(t){
+  const dt=Math.min(.05,((t-(rideState.last||t))/1000)||0);
+  rideState.last=t;
+  const h=horses.find(x=>x.id===rideState.horseId);
+  const h3=three3D.horses[rideState.horseId];
+  if(!h||!h3||h.pos.location!=='pasture'){ stopRide(); return; }
+
+  let f=0,turn=0;
+  if(rideState.keys.f)f+=1;
+  if(rideState.keys.b)f-=1;
+  if(rideState.keys.r)turn+=1;
+  if(rideState.keys.l)turn-=1;
+  f+=rideState.joy.y;
+  turn+=rideState.joy.x;
+  f=Math.max(-1,Math.min(1,f));
+  turn=Math.max(-1,Math.min(1,turn));
+
+  const SPEED=11,TURNSPEED=2.4;
+  if(turn) h3.facing+=turn*TURNSPEED*dt;
+
+  h.pos.grazing=false;
+  if(f!==0){
+    const fx=Math.cos(h3.facing),fz=-Math.sin(h3.facing);
+    const wdx=fx*f*SPEED*dt, wdz=fz*f*SPEED*dt;
+    h.pos.x=Math.max(4,Math.min(88,parseFloat(h.pos.x)+wdx/0.62));
+    h.pos.depth=Math.max(25,Math.min(78,parseFloat(h.pos.depth)-wdz/0.62));
+  }
+
+  const g=h3.group;
+  const behindX=g.position.x-Math.cos(h3.facing)*rideState.camDist;
+  const behindZ=g.position.z+Math.sin(h3.facing)*rideState.camDist;
+  three3D.camera.position.lerp(new THREE.Vector3(behindX,rideState.camHeight,behindZ),.18);
+  three3D.camera.lookAt(g.position.x,2.2,g.position.z);
+}
+
+function initRideJoystick(){
+  const joy=document.getElementById('ride-joy');
+  const knob=document.getElementById('ride-joy-knob');
+  if(!joy||!knob) return;
+  const R=44;
+  const place=(dx,dy)=>{
+    const d=Math.hypot(dx,dy);
+    if(d>R){dx*=R/d;dy*=R/d;}
+    knob.style.transform='translate('+dx+'px,'+dy+'px)';
+  };
+  const update=e=>{
+    const r=joy.getBoundingClientRect();
+    const cx=r.left+r.width/2, cy=r.top+r.height/2;
+    let dx=e.clientX-cx, dy=e.clientY-cy;
+    const d=Math.hypot(dx,dy);
+    if(d>R){dx*=R/d;dy*=R/d;}
+    place(dx,dy);
+    if(rideState) rideState.joy={x:dx/R,y:-dy/R};
+  };
+  const release=()=>{
+    place(0,0);
+    if(rideState) rideState.joy={x:0,y:0};
+  };
+  joy.addEventListener('pointerdown',e=>{ joy.setPointerCapture(e.pointerId); update(e); });
+  joy.addEventListener('pointermove',e=>{ if(joy.hasPointerCapture(e.pointerId)) update(e); });
+  joy.addEventListener('pointerup',release);
+  joy.addEventListener('pointercancel',release);
+}
+
+window.addEventListener('keydown',e=>{
+  if(!rideState) return;
+  if(e.key==='ArrowUp'||e.key==='ArrowDown'||e.key==='ArrowLeft'||e.key==='ArrowRight') e.preventDefault();
+  const k=rideState.keys;
+  if(e.key==='w'||e.key==='W'||e.key==='ArrowUp')k.f=1;
+  else if(e.key==='s'||e.key==='S'||e.key==='ArrowDown')k.b=1;
+  if(e.key==='a'||e.key==='A'||e.key==='ArrowLeft')k.l=1;
+  else if(e.key==='d'||e.key==='D'||e.key==='ArrowRight')k.r=1;
+});
+window.addEventListener('keyup',e=>{
+  if(!rideState) return;
+  const k=rideState.keys;
+  if(e.key==='w'||e.key==='W'||e.key==='ArrowUp')k.f=0;
+  else if(e.key==='s'||e.key==='S'||e.key==='ArrowDown')k.b=0;
+  if(e.key==='a'||e.key==='A'||e.key==='ArrowLeft')k.l=0;
+  else if(e.key==='d'||e.key==='D'||e.key==='ArrowRight')k.r=0;
+});
