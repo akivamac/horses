@@ -1,12 +1,14 @@
 // Clover Hill Farm — Service Worker
 // Handles caching, offline support, and persistent save data
 
-const CACHE_NAME = 'clover-hill-v1';
+const CACHE_NAME = 'clover-hill-v3';
 const SAVE_STORE = 'clover-hill-saves';
 
 // Files to cache for offline use
 const CACHE_FILES = [
   './horse-farm.html',
+  './vendor/three.min.js',
+  './vendor/OrbitControls.js',
   'https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400&family=Nunito:wght@400;700;800&display=swap',
 ];
 
