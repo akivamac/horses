@@ -354,8 +354,8 @@ function buildHorse3D(body,mane,name){
   g.add(horseSilhouette(FF_HOOF,22,-.42,hoofM));
   g.add(horseSilhouette(FH_LEG,22,-.44,legM));
   g.add(horseSilhouette(FH_HOOF,22,-.42,hoofM));
-  // tail — near side over the rump, like the SVG art
-  g.add(horseSilhouette(TAIL,24,.46,maneM));
+  // tail — centered behind the rump so it hangs off the back, not one side
+  g.add(horseSilhouette(TAIL,50,0,maneM));
 
   // neck + head hinged at the neck base so grazing can lower the head
   const hx=-(199-HORSE_CX)*HORSE_SVG, hy=(HORSE_GR-153.5)*HORSE_SVG;
@@ -368,6 +368,14 @@ function buildHorse3D(body,mane,name){
   hn.add(off(horseSilhouette(FORELOCK,14,.30,maneM)));
   hn.add(off(horseSilhouette(EAR_NEAR,20,.30,coatM)));
   hn.add(off(horseSilhouette(EAR_FAR,20,.26,earM)));
+  // facial features — eye with a glint on each side, nostril on the muzzle
+  const disc=(color,r)=>new THREE.Mesh(new THREE.CircleGeometry(r,14),new THREE.MeshStandardMaterial({color:new THREE.Color(color)}));
+  const eye=disc('#1a0a02',.13); eye.position.set(.51,1.13,.37); hn.add(eye);
+  const eyeGlint=disc('#ffffff',.05); eyeGlint.position.set(.56,1.17,.38); hn.add(eyeGlint);
+  const eyeFar=disc('#1a0a02',.13); eyeFar.position.set(.51,1.13,-.02); hn.add(eyeFar);
+  const eyeFarGlint=disc('#ffffff',.05); eyeFarGlint.position.set(.46,1.17,-.03); hn.add(eyeFarGlint);
+  const nostril=disc('#1a0a02',.06); nostril.position.set(.94,1.07,.44); hn.add(nostril);
+  const nostrilFar=disc('#1a0a02',.06); nostrilFar.position.set(.94,1.07,.20); hn.add(nostrilFar);
   // mane follows the neck so it stays attached while grazing
   hn.add(off(horseSilhouette(MANE,24,.46,maneM)));
   g.add(hn);
