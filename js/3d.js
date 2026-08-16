@@ -338,8 +338,8 @@ function buildHorse3D(body,mane,name){
   const MANE='M 138 30 Q 134 45 138 60 Q 128 70 124 85 Q 122 100 130 112 Q 145 122 158 110 Q 150 95 148 80 Q 162 92 175 110 Q 188 130 200 150 Q 210 160 206 168 Q 195 162 182 148 Q 165 128 150 108 Q 140 92 136 75 Q 134 55 138 30 Z';
   const TAIL='M 438 172 Q 460 178 472 200 Q 482 230 478 262 Q 472 295 460 322 Q 452 338 444 342 Q 440 340 442 335 Q 455 312 462 285 Q 468 258 466 232 Q 462 208 450 192 Q 440 182 434 178 Z';
   const FORELOCK='M 152 14 Q 145 22 140 32 Q 138 38 142 40 Q 145 35 148 30 Q 154 22 156 16 Z';
-  const EAR_NEAR='M 144 22 Q 146 6 156 8 Q 162 16 158 30 Q 152 32 146 28 Z';
-  const EAR_FAR='M 158 22 Q 162 8 170 8 Q 175 14 172 28 Q 168 32 162 30 Z';
+  const EAR_NEAR='M 143 26 Q 142 4 153 2 Q 164 4 163 22 Q 161 33 151 33 Q 144 32 143 26 Z';
+  const EAR_FAR='M 157 24 Q 156 4 166 2 Q 176 4 175 22 Q 173 33 165 33 Q 159 32 157 24 Z';
 
   const g=new THREE.Group();
   const parts={};
@@ -363,19 +363,24 @@ function buildHorse3D(body,mane,name){
   hn.position.set(hx,hy,0);
   const off=m=>{ m.position.set(m.position.x-hx,m.position.y-hy,m.position.z); return m; };
   hn.add(off(horseSilhouette(NECK,50,0,coatM)));
-  hn.add(off(horseSilhouette(HEAD,34,.18,coatM)));
-  hn.add(off(horseSilhouette(MUZZLE,20,.32,muzzleM)));
-  hn.add(off(horseSilhouette(FORELOCK,14,.30,maneM)));
-  hn.add(off(horseSilhouette(EAR_NEAR,20,.30,coatM)));
-  hn.add(off(horseSilhouette(EAR_FAR,20,.26,earM)));
+  // thicker head + features pushed proud of the head face so they render
+  hn.add(off(horseSilhouette(HEAD,48,.18,coatM)));
+  hn.add(off(horseSilhouette(MUZZLE,28,.50,muzzleM)));
+  hn.add(off(horseSilhouette(FORELOCK,18,.50,maneM)));
+  hn.add(off(horseSilhouette(EAR_NEAR,24,.46,coatM)));
+  hn.add(off(horseSilhouette(EAR_FAR,24,.24,earM)));
   // facial features — eye with a glint on each side, nostril on the muzzle
-  const disc=(color,r)=>new THREE.Mesh(new THREE.CircleGeometry(r,14),new THREE.MeshStandardMaterial({color:new THREE.Color(color)}));
-  const eye=disc('#1a0a02',.13); eye.position.set(.51,1.13,.37); hn.add(eye);
-  const eyeGlint=disc('#ffffff',.05); eyeGlint.position.set(.56,1.17,.38); hn.add(eyeGlint);
-  const eyeFar=disc('#1a0a02',.13); eyeFar.position.set(.51,1.13,-.02); hn.add(eyeFar);
-  const eyeFarGlint=disc('#ffffff',.05); eyeFarGlint.position.set(.46,1.17,-.03); hn.add(eyeFarGlint);
-  const nostril=disc('#1a0a02',.06); nostril.position.set(.94,1.07,.44); hn.add(nostril);
-  const nostrilFar=disc('#1a0a02',.06); nostrilFar.position.set(.94,1.07,.20); hn.add(nostrilFar);
+  const disc=(color,r,sx=1,sy=1)=>{
+    const m=new THREE.Mesh(new THREE.CircleGeometry(r,14),new THREE.MeshStandardMaterial({color:new THREE.Color(color)}));
+    m.scale.set(sx,sy,1);
+    return m;
+  };
+  const eye=disc('#1a0a02',.065,1.35,1); eye.position.set(.51,1.13,.44); hn.add(eye);
+  const eyeGlint=disc('#ffffff',.02); eyeGlint.position.set(.53,1.15,.455); hn.add(eyeGlint);
+  const eyeFar=disc('#1a0a02',.065,1.35,1); eyeFar.position.set(.51,1.13,-.09); hn.add(eyeFar);
+  const eyeFarGlint=disc('#ffffff',.02); eyeFarGlint.position.set(.49,1.15,-.075); hn.add(eyeFarGlint);
+  const nostril=disc('#1a0a02',.045,1,1.3); nostril.position.set(1.06,1.07,.66); hn.add(nostril);
+  const nostrilFar=disc('#1a0a02',.045,1,1.3); nostrilFar.position.set(1.06,1.07,.34); hn.add(nostrilFar);
   // mane follows the neck so it stays attached while grazing
   hn.add(off(horseSilhouette(MANE,24,.46,maneM)));
   g.add(hn);
